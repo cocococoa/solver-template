@@ -19,8 +19,8 @@ where
 
 fn solve_knapsack() {
     println!("===================================");
-    println!("Solve knapsack problem.");
-    println!("Input format.");
+    println!("Solve knapsack problem");
+    println!("Input format:");
     println!("    N   W");
     println!("    v_1 w_1");
     println!("    v_2 w_2");
@@ -41,6 +41,7 @@ fn solve_knapsack() {
     }
 
     println!("===================================");
+    println!("Run knapsack solver");
     let solver = KSSolver::new(items, w as u64);
     let result = solver.run();
 

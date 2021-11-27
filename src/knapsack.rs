@@ -98,6 +98,11 @@ impl KSSolver {
     pub fn run(&self) -> KSResult {
         let start = Instant::now();
 
+        // for debug
+        let mut searched_node: u64 = 0;
+        let mut searched_leaf: u64 = 0;
+        let mut pruned_leaf: u64 = 0;
+
         // for return
         let mut known_best = vec![];
         let mut lb = 0;
@@ -115,15 +120,16 @@ impl KSSolver {
                     first_item.value(),
                     first_item.weight(),
                 ));
+            } else {
+                pruned_leaf += 1 << (self.items.len() - 1);
             }
         }
         let mut cur_state = vec![];
         cur_state.reserve(self.items.len());
 
-        // for debug
-        let mut bounded: u64 = 0;
-
         while !stack.is_empty() {
+            searched_node += 1;
+
             let parent = stack.pop().unwrap();
 
             // set cur_state to the state of parent
@@ -138,6 +144,8 @@ impl KSSolver {
 
             // if reached to the leaf
             if parent.depth + 1 == self.items.len() {
+                searched_leaf += 1;
+
                 // update known best
                 if parent.value_sum > lb {
                     known_best = cur_state.clone();
@@ -148,27 +156,32 @@ impl KSSolver {
             }
 
             // branch and bound
-            let children = branch(parent, &self.items, self.max_weight);
+            let children = branch(parent, &self.items, self.max_weight, &mut pruned_leaf);
             for child in children.into_iter().rev() {
                 let ub = bound(&child, &self.items, self.max_weight);
 
                 // if the upper bound of child is smaller than lb,
                 // we prune this subproblem.
                 if ub <= lb {
-                    bounded += 1 << (self.items.len() - child.depth - 1);
+                    pruned_leaf += 1 << (self.items.len() - child.depth - 1);
                     continue;
                 }
 
                 stack.push(child);
             }
 
+            // TODO: 探索の中途状態を1秒ごとにプリントする
             if start.elapsed() > self.timeout {
                 break;
             }
         }
 
         // for debug
-        println!("Bounded: {}", bounded);
+        println!("Elapsed time : {} [us]", start.elapsed().as_micros());
+        println!("Searched node: {}", searched_node);
+        println!("Searched leaf: {}", searched_leaf);
+        println!("Pruned leaf  : {}", pruned_leaf);
+        assert_eq!(1 << self.items.len(), searched_leaf + pruned_leaf);
 
         let mut set = HashSet::new();
         for i in 0..known_best.len() {
@@ -181,6 +194,7 @@ impl KSSolver {
             value_sum: lb,
             weight_sum: weight_sum,
             is_best: stack.is_empty(),
+            elapsed: start.elapsed(),
         }
     }
 }
@@ -191,6 +205,7 @@ pub struct KSResult<'a> {
     value_sum: u64,
     weight_sum: u64,
     is_best: bool,
+    elapsed: Duration,
 }
 impl KSResult<'_> {
     pub fn get(&self, name: &str) -> bool {
@@ -207,6 +222,9 @@ impl KSResult<'_> {
     }
     pub fn is_best(&self) -> bool {
         self.is_best
+    }
+    pub fn elapsed(&self) -> Duration {
+        self.elapsed
     }
 }
 
@@ -228,7 +246,12 @@ impl SubProblem {
 }
 
 // create subproblems
-fn branch(parent: SubProblem, items: &Vec<Item>, max_weight: u64) -> Vec<SubProblem> {
+fn branch(
+    parent: SubProblem,
+    items: &Vec<Item>,
+    max_weight: u64,
+    pruned_leaf: &mut u64,
+) -> Vec<SubProblem> {
     let child_depth = parent.depth + 1;
     debug_assert!(child_depth < items.len());
 
@@ -249,6 +272,7 @@ fn branch(parent: SubProblem, items: &Vec<Item>, max_weight: u64) -> Vec<SubProb
         };
         vec![child_in, child_out]
     } else {
+        *pruned_leaf += 1 << (items.len() - child_depth - 1);
         vec![child_out]
     }
 }
