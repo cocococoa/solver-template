@@ -61,6 +61,77 @@ impl Item {
 }
 
 #[derive(Debug)]
+struct KSDebug {
+    n: usize,
+    searched_node: u32,
+    searched_leaf: u32,
+    pruned_leaf: HashMap<usize, u32>,
+}
+impl KSDebug {
+    fn new(n: usize) -> Self {
+        KSDebug {
+            n: n,
+            searched_node: 0,
+            searched_leaf: 0,
+            pruned_leaf: HashMap::new(),
+        }
+    }
+    fn visit_node(&mut self) {
+        self.searched_node += 1;
+    }
+    fn visit_leaf(&mut self) {
+        self.searched_leaf += 1;
+    }
+    fn prune(&mut self, ord: usize) {
+        match self.pruned_leaf.get_mut(&ord) {
+            Some(value) => {
+                *value += 1;
+            }
+            None => {
+                self.pruned_leaf.insert(ord, 1);
+            }
+        }
+    }
+    fn calc_prune_leaf(&self) -> u128 {
+        let mut ret = 0;
+        for (ord, num) in self.pruned_leaf.iter() {
+            ret += *num as u128 * (1 << *ord as u128);
+        }
+        ret
+    }
+    fn estimate_progress(&self) -> f64 {
+        let mut v = vec![0; self.n + 1];
+        for (ord, num) in self.pruned_leaf.iter() {
+            v[*ord] = *num;
+        }
+        let mut remain = 0;
+        for x in v.iter_mut() {
+            *x += remain;
+            remain = *x / 2;
+            *x = *x % 2;
+        }
+
+        let mut all_one = true;
+        let mut ret = 0.0;
+        for i in 1..30 {
+            if self.n >= i {
+                if v[self.n - i] == 1 {
+                    ret += 1.0 / (1 << i) as f64;
+                } else {
+                    all_one = false;
+                }
+            }
+        }
+
+        if all_one {
+            1.0
+        } else {
+            ret
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct KSSolver {
     items: Vec<Item>,
     timeout: Duration,
@@ -99,9 +170,7 @@ impl KSSolver {
         let start = Instant::now();
 
         // for debug
-        let mut searched_node: u64 = 0;
-        let mut searched_leaf: u64 = 0;
-        let mut pruned_leaf: u64 = 0;
+        let mut ks_debug = KSDebug::new(self.items.len());
 
         // for return
         let mut known_best = vec![];
@@ -121,14 +190,14 @@ impl KSSolver {
                     first_item.weight(),
                 ));
             } else {
-                pruned_leaf += 1 << (self.items.len() - 1);
+                ks_debug.prune(self.items.len() - 1);
             }
         }
         let mut cur_state = vec![];
         cur_state.reserve(self.items.len());
 
         while !stack.is_empty() {
-            searched_node += 1;
+            ks_debug.visit_node();
 
             let parent = stack.pop().unwrap();
 
@@ -144,7 +213,7 @@ impl KSSolver {
 
             // if reached to the leaf
             if parent.depth + 1 == self.items.len() {
-                searched_leaf += 1;
+                ks_debug.visit_leaf();
 
                 // update known best
                 if parent.value_sum > lb {
@@ -156,21 +225,20 @@ impl KSSolver {
             }
 
             // branch and bound
-            let children = branch(parent, &self.items, self.max_weight, &mut pruned_leaf);
+            let children = branch(parent, &self.items, self.max_weight, &mut ks_debug);
             for child in children.into_iter().rev() {
                 let ub = bound(&child, &self.items, self.max_weight);
 
                 // if the upper bound of child is smaller than lb,
                 // we prune this subproblem.
                 if ub <= lb {
-                    pruned_leaf += 1 << (self.items.len() - child.depth - 1);
+                    ks_debug.prune(self.items.len() - child.depth - 1);
                     continue;
                 }
 
                 stack.push(child);
             }
 
-            // TODO: 探索の中途状態を1秒ごとにプリントする
             if start.elapsed() > self.timeout {
                 break;
             }
@@ -178,10 +246,16 @@ impl KSSolver {
 
         // for debug
         println!("Elapsed time : {} [us]", start.elapsed().as_micros());
-        println!("Searched node: {}", searched_node);
-        println!("Searched leaf: {}", searched_leaf);
-        println!("Pruned leaf  : {}", pruned_leaf);
-        assert_eq!(1 << self.items.len(), searched_leaf + pruned_leaf);
+        println!("Progress     : {} %", 100.0 * ks_debug.estimate_progress());
+        println!("Searched node: {}", ks_debug.searched_node);
+        println!("Searched leaf: {}", ks_debug.searched_leaf);
+        if self.items.len() <= 127 {
+            println!("Pruned leaf  : {}", ks_debug.calc_prune_leaf());
+            debug_assert_eq!(
+                1 << self.items.len(),
+                ks_debug.searched_leaf as u128 + ks_debug.calc_prune_leaf()
+            );
+        }
 
         let mut set = HashSet::new();
         for i in 0..known_best.len() {
@@ -250,7 +324,7 @@ fn branch(
     parent: SubProblem,
     items: &Vec<Item>,
     max_weight: u64,
-    pruned_leaf: &mut u64,
+    ks_debug: &mut KSDebug,
 ) -> Vec<SubProblem> {
     let child_depth = parent.depth + 1;
     debug_assert!(child_depth < items.len());
@@ -272,7 +346,7 @@ fn branch(
         };
         vec![child_in, child_out]
     } else {
-        *pruned_leaf += 1 << (items.len() - child_depth - 1);
+        ks_debug.prune(items.len() - child_depth - 1);
         vec![child_out]
     }
 }

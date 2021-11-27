@@ -28,6 +28,7 @@ fn solve_knapsack() {
     println!("    v_N w_N");
     let mut items = vec![];
 
+    // FIXME: too late
     use std::io::{self, BufRead};
     let stdin = io::stdin();
     let mut input = stdin.lock();
