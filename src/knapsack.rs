@@ -104,11 +104,15 @@ impl KSDebug {
         for (ord, num) in self.pruned_leaf.iter() {
             v[*ord] = *num;
         }
+        v[0] += self.searched_leaf;
         let mut remain = 0;
         for x in v.iter_mut() {
             *x += remain;
             remain = *x / 2;
             *x = *x % 2;
+        }
+        if v[self.n] == 1 {
+            return 1.0;
         }
 
         let mut all_one = true;
