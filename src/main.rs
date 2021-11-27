@@ -15,7 +15,6 @@ where
 }
 
 fn main() {
-    let mut names = vec![];
     let mut items = vec![];
 
     use std::io::{self, BufRead};
@@ -25,12 +24,9 @@ fn main() {
     input.read_line(&mut line).unwrap();
     let (n, w) = read(&line);
     for i in 0..n {
-        names.push(format!("{}", i + 1));
-    }
-    for i in 0..n {
         input.read_line(&mut line).unwrap();
         let (v, w) = read::<u64>(&line);
-        items.push(Item::new(names.get(i).unwrap(), v, w));
+        items.push(Item::new(format!("{}", i + 1), v, w));
     }
 
     let solver = KSSolver::new(items, w as u64);
@@ -43,6 +39,7 @@ fn main() {
         println!("Best solution has not found");
     }
     println!("Maximum: {}", result.value_sum());
+    println!("Weight: {}", result.weight_sum());
     let mut list = result.list();
     list.sort_by(|a, b| {
         let na = a.parse::<usize>().unwrap();
@@ -50,6 +47,6 @@ fn main() {
         na.cmp(&nb)
     });
     for i in list {
-        println!("Select {}", solver.get(i).unwrap());
+        println!("Select {}", solver.search(i).unwrap());
     }
 }

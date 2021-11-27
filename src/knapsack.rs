@@ -4,17 +4,17 @@ use std::fmt::{self, Display, Formatter};
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct Item<'a> {
-    name: &'a str,
+pub struct Item {
+    name: String,
     value: u64,
     weight: u64,
 }
-impl PartialOrd for Item<'_> {
+impl PartialOrd for Item {
     fn partial_cmp(&self, rhs: &Self) -> Option<Ordering> {
         Some(self.cmp(rhs))
     }
 }
-impl Ord for Item<'_> {
+impl Ord for Item {
     fn cmp(&self, other: &Self) -> Ordering {
         // comparet self.eff()
         let a = self.value * other.weight;
@@ -27,7 +27,7 @@ impl Ord for Item<'_> {
         }
     }
 }
-impl Display for Item<'_> {
+impl Display for Item {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(
             f,
@@ -38,16 +38,16 @@ impl Display for Item<'_> {
         )
     }
 }
-impl Item<'_> {
-    pub fn new<'a>(name: &'a str, value: u64, weight: u64) -> Item<'a> {
+impl Item {
+    pub fn new(name: String, value: u64, weight: u64) -> Item {
         Item {
             name: name,
             value: value,
             weight: weight,
         }
     }
-    pub fn name<'a>(&'a self) -> &'a str {
-        self.name
+    pub fn name(&self) -> &str {
+        &self.name
     }
     pub fn value(&self) -> u64 {
         self.value
@@ -61,25 +61,23 @@ impl Item<'_> {
 }
 
 #[derive(Debug)]
-pub struct KSSolver<'a> {
-    items: Vec<Item<'a>>,
+pub struct KSSolver {
+    items: Vec<Item>,
     timeout: Duration,
     max_weight: u64,
-    dict: HashMap<&'a str, usize>,
 }
-impl KSSolver<'_> {
+impl KSSolver {
     pub fn new(mut items: Vec<Item>, max_weight: u64) -> KSSolver {
         items.sort_by(|a, b| b.cmp(a));
         let mut dict = HashMap::new();
         for (i, item) in items.iter().enumerate() {
-            dict.insert(item.name, i);
+            dict.insert(item.name(), i);
         }
 
         KSSolver {
             items: items,
             timeout: Duration::from_secs(1),
             max_weight: max_weight,
-            dict: dict,
         }
     }
     pub fn set_timeout(&mut self, timeout: Duration) {
@@ -94,11 +92,8 @@ impl KSSolver<'_> {
     pub fn max_weight(&self) -> u64 {
         self.max_weight
     }
-    pub fn get(&self, i: &str) -> Option<&Item> {
-        match self.dict.get(i) {
-            Some(index) => self.items.get(*index),
-            None => None,
-        }
+    pub fn search(&self, i: &str) -> Option<&Item> {
+        self.items.iter().find(|x| x.name == i)
     }
     pub fn run(&self) -> KSResult {
         let start = Instant::now();
@@ -106,6 +101,7 @@ impl KSSolver<'_> {
         // for return
         let mut known_best = vec![];
         let mut lb = 0;
+        let mut weight_sum = 0;
 
         // for search
         let mut stack = vec![];
@@ -144,8 +140,9 @@ impl KSSolver<'_> {
             if parent.depth + 1 == self.items.len() {
                 // update known best
                 if parent.value_sum > lb {
-                    lb = parent.value_sum;
                     known_best = cur_state.clone();
+                    lb = parent.value_sum;
+                    weight_sum = parent.weight_sum;
                 }
                 continue;
             }
@@ -176,12 +173,13 @@ impl KSSolver<'_> {
         let mut set = HashSet::new();
         for i in 0..known_best.len() {
             if known_best[i] {
-                set.insert(self.items[i].name);
+                set.insert(self.items[i].name());
             }
         }
         KSResult {
             known_best: set,
             value_sum: lb,
+            weight_sum: weight_sum,
             is_best: stack.is_empty(),
         }
     }
@@ -191,6 +189,7 @@ impl KSSolver<'_> {
 pub struct KSResult<'a> {
     known_best: HashSet<&'a str>,
     value_sum: u64,
+    weight_sum: u64,
     is_best: bool,
 }
 impl KSResult<'_> {
@@ -202,6 +201,9 @@ impl KSResult<'_> {
     }
     pub fn value_sum(&self) -> u64 {
         self.value_sum
+    }
+    pub fn weight_sum(&self) -> u64 {
+        self.weight_sum
     }
     pub fn is_best(&self) -> bool {
         self.is_best
@@ -276,8 +278,8 @@ mod tests {
 
     #[test]
     fn test_item() {
-        let a = Item::new("a", 30, 15);
-        let b = Item::new("b", 3, 2);
+        let a = Item::new("a".to_string(), 30, 15);
+        let b = Item::new("b".to_string(), 3, 2);
 
         assert_eq!(2 as f64, a.eff());
         assert_eq!("a", a.name());
@@ -291,12 +293,12 @@ mod tests {
     fn test_solver_small() {
         // ref: https://qiita.com/drken/items/a5e6fe22863b7992efdb
         let items = vec![
-            Item::new("a", 3, 2),
-            Item::new("b", 2, 1),
-            Item::new("c", 6, 3),
-            Item::new("d", 1, 2),
-            Item::new("e", 3, 1),
-            Item::new("f", 85, 5),
+            Item::new("a".to_string(), 3, 2),
+            Item::new("b".to_string(), 2, 1),
+            Item::new("c".to_string(), 6, 3),
+            Item::new("d".to_string(), 1, 2),
+            Item::new("e".to_string(), 3, 1),
+            Item::new("f".to_string(), 85, 5),
         ];
 
         let solver = KSSolver::new(items, 9);
@@ -318,36 +320,36 @@ mod tests {
     fn test_solver_large() {
         // ref: https://atcoder.jp/contests/abc032/tasks/abc032_d
         let items = vec![
-            Item::new("a", 128990795, 137274936),
-            Item::new("b", 575374246, 989051853),
-            Item::new("c", 471048785, 85168425),
-            Item::new("d", 640066776, 856699603),
-            Item::new("e", 819841327, 611065509),
-            Item::new("f", 704171581, 22345022),
-            Item::new("g", 536108301, 678298936),
-            Item::new("h", 119980848, 616908153),
-            Item::new("i", 117241527, 28801762),
-            Item::new("j", 325850062, 478675378),
-            Item::new("k", 623319578, 706900574),
-            Item::new("l", 998395208, 738510039),
-            Item::new("m", 475707585, 135746508),
-            Item::new("n", 863910036, 599020879),
-            Item::new("o", 340559411, 738084616),
-            Item::new("p", 122579234, 545330137),
-            Item::new("q", 696368935, 86797589),
-            Item::new("r", 665665204, 592749599),
-            Item::new("s", 958833732, 401229830),
-            Item::new("t", 371084424, 523386474),
-            Item::new("u", 463433600, 5310725),
-            Item::new("v", 210508742, 907821957),
-            Item::new("w", 685281136, 565237085),
-            Item::new("z", 619500108, 730556272),
-            Item::new("y", 88215377, 310581512),
-            Item::new("z", 558193168, 136966252),
-            Item::new("1", 475268130, 132739489),
-            Item::new("2", 303022740, 12425915),
-            Item::new("3", 122379996, 137199296),
-            Item::new("4", 304092766, 23505143),
+            Item::new("a".to_string(), 128990795, 137274936),
+            Item::new("b".to_string(), 575374246, 989051853),
+            Item::new("c".to_string(), 471048785, 85168425),
+            Item::new("d".to_string(), 640066776, 856699603),
+            Item::new("e".to_string(), 819841327, 611065509),
+            Item::new("f".to_string(), 704171581, 22345022),
+            Item::new("g".to_string(), 536108301, 678298936),
+            Item::new("h".to_string(), 119980848, 616908153),
+            Item::new("i".to_string(), 117241527, 28801762),
+            Item::new("j".to_string(), 325850062, 478675378),
+            Item::new("k".to_string(), 623319578, 706900574),
+            Item::new("l".to_string(), 998395208, 738510039),
+            Item::new("m".to_string(), 475707585, 135746508),
+            Item::new("n".to_string(), 863910036, 599020879),
+            Item::new("o".to_string(), 340559411, 738084616),
+            Item::new("p".to_string(), 122579234, 545330137),
+            Item::new("q".to_string(), 696368935, 86797589),
+            Item::new("r".to_string(), 665665204, 592749599),
+            Item::new("s".to_string(), 958833732, 401229830),
+            Item::new("t".to_string(), 371084424, 523386474),
+            Item::new("u".to_string(), 463433600, 5310725),
+            Item::new("v".to_string(), 210508742, 907821957),
+            Item::new("w".to_string(), 685281136, 565237085),
+            Item::new("z".to_string(), 619500108, 730556272),
+            Item::new("y".to_string(), 88215377, 310581512),
+            Item::new("z".to_string(), 558193168, 136966252),
+            Item::new("1".to_string(), 475268130, 132739489),
+            Item::new("2".to_string(), 303022740, 12425915),
+            Item::new("3".to_string(), 122379996, 137199296),
+            Item::new("4".to_string(), 304092766, 23505143),
         ];
 
         let solver = KSSolver::new(items, 499887702);
