@@ -172,9 +172,10 @@ impl KSSolver {
     }
     pub fn run(&self) -> KSResult {
         let start = Instant::now();
+        let n = self.items.len();
 
         // for debug
-        let mut ks_debug = KSDebug::new(self.items.len());
+        let mut ks_debug = KSDebug::new(n);
 
         // for return
         let mut known_best = vec![];
@@ -183,7 +184,7 @@ impl KSSolver {
 
         // for search
         let mut stack = vec![];
-        if self.items.len() > 0 {
+        if n > 0 {
             let first_item = self.items.get(0).unwrap();
             stack.push(SubProblem::new(0, false, 0, 0));
             if first_item.weight() <= self.max_weight {
@@ -194,11 +195,11 @@ impl KSSolver {
                     first_item.weight(),
                 ));
             } else {
-                ks_debug.prune(self.items.len() - 1);
+                ks_debug.prune(n - 1);
             }
         }
         let mut cur_state = vec![];
-        cur_state.reserve(self.items.len());
+        cur_state.reserve(n);
 
         while !stack.is_empty() {
             ks_debug.visit_node();
@@ -216,7 +217,7 @@ impl KSSolver {
             }
 
             // if reached to the leaf
-            if parent.depth + 1 == self.items.len() {
+            if parent.depth + 1 == n {
                 ks_debug.visit_leaf();
 
                 // update known best
@@ -236,7 +237,7 @@ impl KSSolver {
                 // if the upper bound of child is smaller than lb,
                 // we prune this subproblem.
                 if ub <= lb {
-                    ks_debug.prune(self.items.len() - child.depth - 1);
+                    ks_debug.prune(n - child.depth - 1);
                     continue;
                 }
 
@@ -253,12 +254,29 @@ impl KSSolver {
         println!("Progress     : {} %", 100.0 * ks_debug.estimate_progress());
         println!("Searched node: {}", ks_debug.searched_node);
         println!("Searched leaf: {}", ks_debug.searched_leaf);
-        if self.items.len() <= 127 {
+        if n <= 127 {
             println!("Pruned leaf  : {}", ks_debug.calc_prune_leaf());
             debug_assert_eq!(
-                1 << self.items.len(),
+                1 << n,
                 ks_debug.searched_leaf as u128 + ks_debug.calc_prune_leaf()
             );
+        }
+
+        // calculate upper bound
+        {
+            let mut ub = 0.0;
+            let mut remain_weight = self.max_weight();
+            for i in 0..n {
+                let x = self.items.get(i).unwrap();
+                if x.weight() <= remain_weight {
+                    ub += x.value() as f64;
+                    remain_weight -= x.weight();
+                } else {
+                    ub += x.eff() * remain_weight as f64;
+                    break;
+                }
+            }
+            println!("upper bound  : {}", ub as u64);
         }
 
         let mut set = HashSet::new();
