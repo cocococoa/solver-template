@@ -1,4 +1,7 @@
+extern crate getopts;
+use getopts::Options;
 use solver_template::{Item, KSSolver};
+use std::env;
 
 fn read<T>(line: &str) -> (T, T)
 where
@@ -14,7 +17,15 @@ where
     (first, second)
 }
 
-fn main() {
+fn solve_knapsack() {
+    println!("===================================");
+    println!("Solve knapsack problem.");
+    println!("Input format.");
+    println!("    N   W");
+    println!("    v_1 w_1");
+    println!("    v_2 w_2");
+    println!("    ...");
+    println!("    v_N w_N");
     let mut items = vec![];
 
     use std::io::{self, BufRead};
@@ -29,6 +40,7 @@ fn main() {
         items.push(Item::new(format!("{}", i + 1), v, w));
     }
 
+    println!("===================================");
     let solver = KSSolver::new(items, w as u64);
     let result = solver.run();
 
@@ -48,5 +60,21 @@ fn main() {
     });
     for i in list {
         println!("Select {}", solver.search(i).unwrap());
+    }
+}
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    let mut opts = Options::new();
+    opts.reqopt("t", "type", "Type of problem to solve", "");
+    let matches = match opts.parse(&args[1..]) {
+        Ok(m) => m,
+        Err(f) => panic!("{}", f),
+    };
+
+    let _knapsack = "knapsack".to_string();
+    match matches.opt_str("t") {
+        Some(_knapsack) => solve_knapsack(),
+        _ => unimplemented!(),
     }
 }
